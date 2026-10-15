@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TILT & TELL! - Classroom Battle</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        :root {
+            --bg-color: #cce5ff;
+            --neon-green: #39ff14;
+            --neon-red: #ff073a;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .decoration {
+            position: fixed;
+            font-size: 100px;
+            opacity: 0.15;
+            z-index: -1;
+            user-select: none;
+            filter: drop-shadow(0px 10px 10px rgba(0,0,0,0.1));
+        }
+        .dec1 { top: 10%; left: 10%; }
+        .dec2 { top: 60%; left: 80%; }
+        .dec3 { top: 20%; right: 15%; }
+        .dec4 { top: 70%; left: 15%; }
+        .dec5 { bottom: 5%; right: 40%; font-size: 80px;}
+
+        .title {
+            font-family: 'Arial Black', Impact, sans-serif;
+            font-size: 3.5rem;
+            margin: 1vh 0;
+            background: linear-gradient(to right, #ff007f, #ffaa00, #00ffaa, #00aaff, #aa00ff);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-transform: uppercase;
+            filter: drop-shadow(2px 2px 4px rgba(0,0,0,0.2));
+            height: 8vh; 
+            display: flex;
+            align-items: center;
+        }
+
+        #game-area {
+            display: none;
+            width: 100%;
+            height: 80vh; 
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+        }
+
+        /* Question Counter & Badge Row */
+        #status-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            margin-bottom: 1vh;
+        }
+
+        #turn-badge {
+            font-size: 2rem;
+            font-weight: bold;
+            padding: 5px 25px;
+            border-radius: 30px;
+            color: white;
+            text-transform: uppercase;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+        }
+        .boys-turn { background: #007bff; }
+        .girls-turn { background: #ff5e8e; }
+
+        #question-counter {
+            font-size: 2rem;
+            font-weight: 800;
+            color: #444;
+            background: white;
+            padding: 5px 20px;
+            border-radius: 15px;
+            border: 3px solid #ddd;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+        }
+
+        #question-box {
+            height: 38vh;
+            width: 85%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+        }
+
+        #question-image {
+            max-height: 75%;
+            max-width: 50%;
+            border-radius: 20px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+            border: 5px solid white;
+            object-fit: contain;
+            background: rgba(255,255,255,0.5);
+        }
+
+        #question-label {
+            font-size: 2.2rem;
+            font-weight: bold;
+            color: #333;
+            margin-top: 10px;
+            line-height: 1.2;
+        }
+
+        #camera-box {
+            height: 18vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 1vh;
+        }
+
+        #output_canvas {
+            height: 100%;
+            border-radius: 15px;
+            border: 4px solid white;
+            box-shadow: 0 8px 15px rgba(0,0,0,0.15);
+            background-color: #000;
+            transform: scaleX(-1); 
+        }
+
+        .choice {
+            position: absolute;
+            top: 45%;
+            font-size: 3.5rem;
+            font-weight: 900;
+            color: #444;
+            text-shadow: 2px 2px 10px rgba(255,255,255,0.8);
+            background: rgba(255,255,255,0.4);
+            padding: 10px 30px;
+            border-radius: 20px;
+            max-width: 25%;
+            text-align: center;
+        }
+        #choice-left { left: 3%; }
+        #choice-right { right: 3%; }
+
+        #feedback-text {
+            position: absolute;
+            top: 55%;
+            font-size: 6rem;
+            font-weight: bold;
+            display: none;
+            z-index: 50;
+            text-shadow: 0px 0px 20px rgba(255,255,255,0.9);
+        }
+
+        /* Dual Scoreboard */
+        #scoreboard {
+            position: fixed;
+            bottom: 15px;
+            left: 20px;
+            display: flex;
+            gap: 20px;
+            font-size: 1.8rem;
+            font-weight: bold;
+        }
+        .score-box {
+            padding: 5px 15px;
+            border-radius: 10px;
+            color: white;
+        }
+        .b-score { background: #007bff; }
+        .g-score { background: #ff5e8e; }
+
+        #start-screen, #end-screen, #transition-screen {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(204, 229, 255, 0.98);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 2rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 50px;
+            background: #ff5e8e;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(255, 94, 142, 0.4);
+            margin-top: 20px;
+        }
+
+        #loading { display: none; font-size: 1.5rem; margin-top: 20px; color: #555; }
+        #swap-btn { position: fixed; bottom: 15px; right: 20px; font-size: 1rem; padding: 10px 20px; background: #888; }
+        video { display: none; }
+    </style>
+</head>
+<body>
+
+    <audio id="bg-music" loop src="background-music.mp3"></audio>
+
+    <div class="decoration dec1">🏥</div>
+    <div class="decoration dec2">🍎</div>
+    <div class="decoration dec3">💧</div>
+    <div class="decoration dec4">🩺</div>
+    <div class="decoration dec5">🥦</div>
+
+    <h1 class="title">TILT & TELL!</h1>
+
+    <div id="start-screen">
+        <h2 style="font-size: 3.5rem; color: #333;">Boys vs. Girls Classroom Battle!</h2>
+        <p style="font-size: 1.8rem; color: #555; text-align: center; max-width: 600px;">
+            Round 1: <b>Boys Turn!</b><br>
+            Tilt your head to answer. Complete all 20 sentences!
+        </p>
+        <button id="start-btn">Start Game</button>
+        <p id="loading">Loading AI Camera... Please wait!</p>
+    </div>
+
+    <div id="transition-screen" style="display: none;">
+        <h1 style="font-size: 4rem; color: #007bff;">Boys Round Finished!</h1>
+        <p style="font-size: 2.5rem; color: #333;">Boys Final Score: <span id="boys-mid-score">0</span> / 20</p>
+        <div style="font-size: 5rem; margin: 20px 0;">👉 👩‍🏫 👈</div>
+        <h2 style="font-size: 3.5rem; color: #ff5e8e;">Round 2: Girls Turn!</h2>
+        <button id="girls-start-btn">Girls, Get Ready!</button>
+    </div>
+
+    <div id="game-area">
+        <div id="status-row">
+            <div id="turn-badge" class="boys-turn">Boys Round</div>
+            <div id="question-counter">Question: 1 / 20</div>
+        </div>
+        
+        <div id="choice-left" class="choice">left</div>
+        
+        <div id="question-box">
+            <img id="question-image" src="" alt="question">
+            <div id="question-label">label</div>
+        </div>
+
+        <div id="choice-right" class="choice">right</div>
+
+        <div id="camera-box">
+            <video id="input_video"></video>
+            <canvas id="output_canvas"></canvas>
+        </div>
+
+        <div id="feedback-text">correct</div>
+    </div>
+
+    <div id="scoreboard">
+        <div class="score-box b-score">Boys: <span id="score-boys">0</span></div>
+        <div class="score-box g-score">Girls: <span id="score-girls">0</span></div>
+    </div>
+    
+    <button id="swap-btn">Swap Tracking Controls</button>
+
+    <div id="end-screen" style="display: none;">
+        <h1 id="winner-title" style="font-size: 5.5rem; color: #ffaa00; margin-bottom: 10px;">👑 WINNER! 👑</h1>
+        <h2 id="winner-text" style="font-size: 3.5rem; color: #333; margin: 0 0 30px 0;">Girls Win!</h2>
+        
+        <div style="display: flex; gap: 40px; font-size: 2.5rem; font-weight: bold; margin-bottom: 40px;">
+            <p style="color: #007bff; margin:0;">Boys Score: <span id="final-boys">0</span> / 20</p>
+            <p style="color: #ff5e8e; margin:0;">Girls Score: <span id="final-girls">0</span> / 20</p>
+        </div>
+        <button onclick="location.reload()">Play Again</button>
+    </div>
+
+    <script>
+        // Total 20 items (16 base sentences + 4 repeats at the end to make it a full 20-item set)
+        const quizData = [
+            { img: 'fever.png', label: 'I have a high _______.', left: 'fever', right: 'cough', correct: 'left' },
+            { img: 'sty.png', label: 'I have a _______ on my eye.', left: 'cut', right: 'sty', correct: 'right' },
+            { img: 'see.png', label: 'I can\'t _______ very well.', left: 'see', right: 'hear', correct: 'left' },
+            { img: 'flu.png', label: 'It sounds like you got the _______.', left: 'cold', right: 'flu', correct: 'right' },
+            { img: 'blood.png', label: 'We will take some of your _______.', left: 'blood', right: 'time', correct: 'left' },
+            { img: 'xray.png', label: 'Your chest _______ shows no signs of any problems.', left: 'X-ray', right: 'scan', correct: 'left' },
+            { img: 'vegetables.png', label: 'I eat lots of fruit and dark green _______.', left: 'candy', right: 'vegetables', correct: 'right' },
+            { img: 'water.png', label: 'Drinking enough _______ helps keep you healthy.', left: 'water', right: 'soda', correct: 'left' },
+            { img: 'mask.png', label: 'Wear a _______ in public to avoid catching a cold.', left: 'mask', right: 'hat', correct: 'left' },
+            { img: 'scratch.png', label: 'Stop _______ your arm.', left: 'scratching', right: 'washing', correct: 'left' },
+            { img: 'sty_eye.png', label: 'I can\'t see very well because of this big _______.', left: 'glasses', right: 'sty', correct: 'right' },
+            { img: 'doctor.png', label: 'The doctor will _______ your problems.', left: 'treat', right: 'make', correct: 'left' },
+            { img: 'headache.png', label: 'I have high fever and _______.', left: 'stomachache', right: 'headache', correct: 'right' },
+            { img: 'exercise.png', label: 'The doctor said I need to _______.', left: 'exercise', right: 'sleep', correct: 'left' },
+            { img: 'fruits.png', label: 'I need to eat more fruits and _______.', left: 'vegetables', right: 'meat', correct: 'left' },
+            { img: 'heart.png', label: 'I need to exercise for my _______ health.', left: 'eye', right: 'heart', correct: 'right' },
+            // Repeated items to reach exactly 20 items per round
+            { img: 'fever.png', label: 'I have a high _______.', left: 'fever', right: 'cough', correct: 'left' },
+            { img: 'flu.png', label: 'It sounds like you got the _______.', left: 'cold', right: 'flu', correct: 'right' },
+            { img: 'mask.png', label: 'Wear a _______ in public to avoid catching a cold.', left: 'mask', right: 'hat', correct: 'left' },
+            { img: 'exercise.png', label: 'The doctor said I need to _______.', left: 'exercise', right: 'sleep', correct: 'left' }
+        ];
+
+        let currentIdx = 0;      // Track absolute index inside quizData loop
+        let roundCounter = 1;    // Track 1 to 20 inside the active round
+        let boysScore = 0;
+        let girlsScore = 0;
+        let currentMode = 'boys'; 
+
+        let canAnswer = false;
+        let glowColor = null;
+        let invertLogic = 1; 
+
+        const videoEl = document.getElementById('input_video');
+        const canvasEl = document.getElementById('output_canvas');
+        const canvasCtx = canvasEl.getContext('2d');
+        const feedbackEl = document.getElementById('feedback-text');
+        const bgMusic = document.getElementById('bg-music');
+
+        let audioCtx;
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            bgMusic.volume = 0.2; 
+            bgMusic.play().catch(e => console.log("Audio play prevented:", e));
+        }
+
+        function playSound(type) {
+            if (!audioCtx) return;
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'correct') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(600, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.4);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.4);
+            } else if (type === 'pop') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            }
+        }
+
+        function loadQuestion() {
+            // Check if active round hit the 20-item limit
+            if (roundCounter > 20) {
+                if (currentMode === 'boys') {
+                    showTransitionScreen();
+                } else {
+                    endGame();
+                }
+                return;
+            }
+
+            // Update visible counters
+            document.getElementById('question-counter').innerText = `Question: ${roundCounter} / 20`;
+
+            // UI Badges
+            const badge = document.getElementById('turn-badge');
+            if (currentMode === 'boys') {
+                badge.innerText = "Boys Round";
+                badge.className = "boys-turn";
+            } else {
+                badge.innerText = "Girls Round";
+                badge.className = "girls-turn";
+            }
+
+            const data = quizData[currentIdx];
+            document.getElementById('question-image').src = data.img;
+
+            let sentence = data.label;
+            sentence = sentence.charAt(0).toUpperCase() + sentence.slice(1);
+            document.getElementById('question-label').innerText = sentence;
+            
+            document.getElementById('choice-left').innerText = data.left;
+            document.getElementById('choice-right').innerText = data.right;
+            
+            feedbackEl.style.display = 'none';
+            glowColor = null;
+            
+            setTimeout(() => { canAnswer = true; }, 1000);
+        }
+
+        function submitAnswer(side) {
+            if (!canAnswer) return;
+            canAnswer = false;
+
+            const correctSide = quizData[currentIdx].correct;
+            
+            if (side === correctSide) {
+                if (currentMode === 'boys') {
+                    boysScore++;
+                    document.getElementById('score-boys').innerText = boysScore;
+                } else {
+                    girlsScore++;
+                    document.getElementById('score-girls').innerText = girlsScore;
+                }
+                glowColor = 'var(--neon-green)';
+                feedbackEl.innerText = 'correct';
+                feedbackEl.style.color = 'var(--neon-green)';
+                playSound('correct');
+            } else {
+                glowColor = 'var(--neon-red)';
+                feedbackEl.innerText = 'incorrect';
+                feedbackEl.style.color = 'var(--neon-red)';
+                playSound('wrong');
+            }
+            
+            feedbackEl.style.display = 'block';
+
+            setTimeout(() => {
+                advanceQuestion();
+            }, 2000);
+        }
+
+        function advanceQuestion() {
+            currentIdx++;
+            roundCounter++;
+            
+            // Loop array if it exceeds length but the game round isn't finished yet
+            if (currentIdx >= quizData.length) {
+                currentIdx = 0;
+            }
+            loadQuestion();
+        }
+
+        function showTransitionScreen() {
+            document.getElementById('game-area').style.display = 'none';
+            document.getElementById('transition-screen').style.display = 'flex';
+            document.getElementById('boys-mid-score').innerText = boysScore;
+            playSound('pop');
+        }
+
+        function startGirlsRound() {
+            currentMode = 'girls';
+            currentIdx = 0;      // Reset list tracking for girls round
+            roundCounter = 1;    // Reset back to question 1 for girls round
+            document.getElementById('transition-screen').style.display = 'none';
+            document.getElementById('game-area').style.display = 'flex';
+            loadQuestion();
+        }
+
+        function endGame() {
+            bgMusic.pause();
+            document.getElementById('game-area').style.display = 'none';
+            document.getElementById('end-screen').style.display = 'flex';
+            
+            document.getElementById('final-boys').innerText = boysScore;
+            document.getElementById('final-girls').innerText = girlsScore;
+
+            const winTitle = document.getElementById('winner-title');
+            const winText = document.getElementById('winner-text');
+
+            if (boysScore > girlsScore) {
+                winTitle.innerText = "👑 BOYS WIN! 👑";
+                winText.innerText = "Great job, boys! Better luck next time, girls.";
+            } else if (girlsScore > boysScore) {
+                winTitle.innerText = "👑 GIRLS WIN! 👑";
+                winText.innerText = "Great job, girls! Better luck next time, boys.";
+            } else {
+                winTitle.innerText = "🤝 IT'S A TIE! 🤝";
+                winText.innerText = "Incredible match! Both teams are superstars.";
+            }
+            
+            playSound('pop');
+            confetti({ particleCount: 200, spread: 90, origin: { y: 0.6 } });
+            setTimeout(() => { 
+                playSound('pop');
+                confetti({ particleCount: 100, spread: 120, origin: { y: 0.6 } });
+            }, 500);
+        }
+
+        /* --- CAMERA & AI TRACKING --- */
+        function onResults(results) {
+            canvasEl.width = videoEl.videoWidth;
+            canvasEl.height = videoEl.videoHeight;
+            
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
+
+            if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
+                const landmarks = results.multiFaceLandmarks[0];
+                
+                const nose = landmarks[1];
+                const chin = landmarks[152];
+                let tilt = (nose.x - chin.x) * invertLogic;
+
+                if (canAnswer) {
+                    if (tilt > 0.05) submitAnswer('left');
+                    if (tilt < -0.05) submitAnswer('right');
+                }
+
+                if (glowColor) {
+                    canvasCtx.strokeStyle = glowColor;
+                    canvasCtx.lineWidth = 6;
+                    canvasCtx.shadowColor = glowColor;
+                    canvasCtx.shadowBlur = 20;
+                    
+                    canvasCtx.beginPath();
+                    const oval = [10, 338, 297, 332, 284, 251, 389, 356, 454, 323, 361, 288, 397, 365, 379, 378, 400, 377, 152, 148, 176, 149, 150, 136, 172, 58, 132, 93, 234, 127, 162, 21, 54, 103, 67, 109];
+                    oval.forEach((idx, i) => {
+                        const pt = landmarks[idx];
+                        if (i === 0) canvasCtx.moveTo(pt.x * canvasEl.width, pt.y * canvasEl.height);
+                        else canvasCtx.lineTo(pt.x * canvasEl.width, pt.y * canvasEl.height);
+                    });
+                    canvasCtx.closePath();
+                    canvasCtx.stroke();
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const faceMesh = new FaceMesh({
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
+        });
+
+        faceMesh.setOptions({
+            maxNumFaces: 1,
+            refineLandmarks: false,
+            minDetectionConfidence: 0.5,
+            minTrackingConfidence: 0.5
+        });
+        faceMesh.onResults(onResults);
+
+        const camera = new Camera(videoEl, {
+            onFrame: async () => {
+                await faceMesh.send({image: videoEl});
+                
+                if (document.getElementById('start-screen').style.display !== 'none' && document.getElementById('loading').style.display === 'block') {
+                    document.getElementById('start-screen').style.display = 'none';
+                    document.getElementById('game-area').style.display = 'flex';
+                    loadQuestion();
+                }
+            },
+            width: 640,
+            height: 480
+        });
+
+        document.getElementById('start-btn').addEventListener('click', () => {
+            initAudio(); 
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('loading').style.display = 'block';
+            camera.start(); 
+        });
+
+        document.getElementById('girls-start-btn').addEventListener('click', () => {
+            startGirlsRound();
+        });
+
+        document.getElementById('swap-btn').addEventListener('click', () => {
+            invertLogic = invertLogic * -1;
+            alert("Controls swapped! Try tilting your head now.");
+        });
+    </script>
+</body>
+</html>
